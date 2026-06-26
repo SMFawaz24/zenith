@@ -1,0 +1,2208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZENITH — The Celestial Eye</title>
+<meta name="description" content="Real-time cosmic radar — track celestial objects, the ISS, planets, and stars from any location on Earth.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Mono:wght@300&family=Inter:wght@300;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN SYSTEM — Obsidian & Starlight
+   ═══════════════════════════════════════════════════ */
+:root {
+  --bg: #000000;
+  --text: #ffffff;
+  --accent: #a8c4d4;
+  --glass: rgba(255,255,255,0.04);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-blur: blur(24px);
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-ui: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'Consolas', monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  cursor: default;
+  user-select: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   CANVAS — the interface IS the canvas
+   ═══════════════════════════════════════════════════ */
+#mainCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+  transition: opacity 200ms ease;
+}
+
+/* ═══════════════════════════════════════════════════
+   BOOT SEQUENCE
+   ═══════════════════════════════════════════════════ */
+#bootOverlay {
+  position: fixed; inset: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 800ms var(--ease);
+}
+#bootOverlay.fade-out { opacity: 0; pointer-events: none; }
+#bootOverlay .boot-logo {
+  font-family: var(--font-display);
+  font-weight: 300; font-size: 28px;
+  letter-spacing: 0.3em;
+  color: var(--text);
+  opacity: 0;
+  animation: bootFadeIn 1200ms 200ms var(--ease) forwards;
+}
+#bootOverlay .boot-sub {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.3);
+  margin-top: 12px;
+  opacity: 0;
+  animation: bootFadeIn 1000ms 800ms var(--ease) forwards;
+}
+@keyframes bootFadeIn { to { opacity: 1; } }
+
+/* ═══════════════════════════════════════════════════
+   TOPBAR — wordmark + clock + object count
+   ═══════════════════════════════════════════════════ */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+}
+#topbar.visible { opacity: 1; }
+#topbar > * { pointer-events: auto; }
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 300; font-size: 14px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.topbar-right {
+  display: flex; align-items: center; gap: 24px;
+}
+
+.obj-count {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+
+.utc-clock {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 13px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════
+   VIEW MODE PILLS — bottom center
+   ═══════════════════════════════════════════════════ */
+#viewModes {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  z-index: 100;
+  display: flex; gap: 2px;
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  padding: 3px;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+}
+#viewModes.visible { opacity: 1; }
+
+.view-btn {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  background: transparent;
+  border: none; outline: none;
+  padding: 8px 20px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 300ms var(--ease);
+}
+.view-btn:hover { color: rgba(255,255,255,0.7); }
+.view-btn.active {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+}
+
+/* ═══════════════════════════════════════════════════
+   LEFT PANEL — object list (slides in)
+   ═══════════════════════════════════════════════════ */
+#leftPanel {
+  position: fixed; top: 70px; left: 0; bottom: 80px;
+  z-index: 90;
+  width: 220px;
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--glass-border);
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+  transform: translateX(-100%);
+  transition: transform 400ms var(--ease), opacity 400ms var(--ease);
+  opacity: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+#leftPanel.visible { transform: translateX(0); opacity: 1; }
+
+.panel-header {
+  padding: 16px 16px 8px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-title {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+.panel-close {
+  background: none; border: none; outline: none;
+  color: rgba(255,255,255,0.3); cursor: pointer;
+  font-size: 14px; padding: 4px;
+  transition: color 300ms ease;
+}
+.panel-close:hover { color: rgba(255,255,255,0.7); }
+
+/* Filter toggles */
+.filter-bar {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 4px 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.filter-tag {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+.filter-tag.active {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.7);
+  border-color: rgba(255,255,255,0.12);
+}
+.filter-tag:hover { color: rgba(255,255,255,0.6); }
+
+.obj-list {
+  flex: 1; overflow-y: auto; padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.06) transparent;
+}
+.obj-list::-webkit-scrollbar { width: 3px; }
+.obj-list::-webkit-scrollbar-track { background: transparent; }
+.obj-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+
+.obj-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 200ms ease, opacity 200ms ease;
+  opacity: 0;
+}
+.obj-item.show { opacity: 1; }
+.obj-item:hover { background: rgba(255,255,255,0.03); }
+.obj-item.selected { background: rgba(255,255,255,0.05); }
+
+.obj-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  transition: transform 300ms var(--ease);
+}
+.obj-item.selected .obj-dot { transform: scale(1.6); }
+.obj-item .obj-info { flex: 1; min-width: 0; }
+.obj-name {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 10px;
+  color: rgba(255,255,255,0.8);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.obj-meta {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 9px;
+  color: rgba(255,255,255,0.25);
+  margin-top: 1px;
+}
+.obj-vis {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 7px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 100px;
+}
+.obj-vis.above { color: rgba(168,196,212,0.8); background: rgba(168,196,212,0.08); }
+.obj-vis.below { color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); }
+
+/* ═══════════════════════════════════════════════════
+   RIGHT PANEL — detail card (floats in)
+   ═══════════════════════════════════════════════════ */
+#rightPanel {
+  position: fixed; top: 50%; right: 28px;
+  z-index: 90;
+  transform: translateY(-50%) translateX(20px);
+  width: 260px;
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 400ms var(--ease);
+}
+#rightPanel.visible {
+  opacity: 1; pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+.detail-close {
+  position: absolute; top: 14px; right: 14px;
+  background: none; border: none; outline: none;
+  color: rgba(255,255,255,0.25); cursor: pointer;
+  font-size: 13px; padding: 4px;
+  transition: color 300ms ease;
+}
+.detail-close:hover { color: rgba(255,255,255,0.6); }
+
+.detail-type {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+.detail-name {
+  font-family: var(--font-display);
+  font-weight: 300; font-size: 22px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.detail-desc {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 10px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 20px;
+}
+.detail-big-num {
+  font-family: var(--font-display);
+  font-weight: 300; font-size: 48px;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.detail-big-label {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.25);
+  margin-bottom: 20px;
+}
+.detail-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.detail-stat-label {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 8px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.25);
+  margin-bottom: 3px;
+}
+.detail-stat-value {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* ISS Ground Track mini-map */
+.iss-map {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.iss-map svg {
+  width: 100%; height: auto;
+  opacity: 0.5;
+}
+.iss-map-label {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 8px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.2);
+  margin-bottom: 6px;
+}
+
+/* Moon phase in detail */
+.moon-phase-vis {
+  width: 40px; height: 40px;
+  margin: 8px 0 12px;
+}
+
+/* Pass predictions */
+.pass-list { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.04); }
+.pass-title {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.25);
+  margin-bottom: 8px;
+}
+.pass-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0;
+}
+.pass-time {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 9px;
+  color: rgba(255,255,255,0.5);
+}
+.pass-info {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 9px;
+  color: rgba(255,255,255,0.3);
+}
+
+/* ═══════════════════════════════════════════════════
+   LOCATION SEARCH — floating bar
+   ═══════════════════════════════════════════════════ */
+#locationBar {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  z-index: 100;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  padding: 6px 6px 6px 18px;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+  width: auto; max-width: 380px;
+}
+#locationBar.visible { opacity: 1; }
+
+#locationBar .loc-label {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.25);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#locationInput {
+  background: none; border: none; outline: none;
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 12px;
+  color: var(--text);
+  width: 160px;
+  padding: 4px 0;
+}
+#locationInput::placeholder { color: rgba(255,255,255,0.15); }
+
+.loc-btn {
+  background: rgba(255,255,255,0.06);
+  border: none; outline: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 9px;
+  padding: 6px 12px;
+  border-radius: 100px;
+  white-space: nowrap;
+  transition: all 200ms ease;
+}
+.loc-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
+
+/* Toggle left panel button */
+#toggleList {
+  position: fixed; top: 50%; left: 12px;
+  z-index: 95;
+  transform: translateY(-50%);
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  width: 28px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: rgba(255,255,255,0.25);
+  font-size: 10px;
+  transition: all 300ms var(--ease);
+  opacity: 0;
+}
+#toggleList.visible { opacity: 1; }
+#toggleList:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
+#toggleList.open { left: 226px; }
+
+/* ═══════════════════════════════════════════════════
+   SOLAR SYSTEM STATUS — bottom left
+   ═══════════════════════════════════════════════════ */
+#solarStatus {
+  position: fixed; bottom: 28px; left: 28px;
+  z-index: 90;
+  display: flex; gap: 16px;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+}
+#solarStatus.visible { opacity: 1; }
+
+.solar-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.solar-icon {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.solar-name {
+  font-family: var(--font-ui);
+  font-weight: 300; font-size: 7px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.2);
+}
+.solar-alt {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 9px;
+  color: rgba(255,255,255,0.4);
+}
+
+/* ═══════════════════════════════════════════════════
+   ISS FLOATING TELEMETRY — top right area
+   ═══════════════════════════════════════════════════ */
+#issTelemetry {
+  position: fixed; top: 60px; right: 28px;
+  z-index: 85;
+  text-align: right;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+  pointer-events: none;
+}
+#issTelemetry.visible { opacity: 1; }
+
+.iss-label {
+  font-family: var(--font-ui);
+  font-weight: 500; font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.5;
+  margin-bottom: 4px;
+}
+.iss-val {
+  font-family: var(--font-mono);
+  font-weight: 300; font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  #rightPanel { display: none; }
+  #leftPanel { width: 180px; }
+  #toggleList.open { left: 186px; }
+}
+@media (max-width: 640px) {
+  #leftPanel { width: 100%; border-radius: 0; top: auto; bottom: 0; height: 45vh;
+    border-right: none; border-top: 1px solid var(--glass-border);
+    transform: translateY(100%); }
+  #leftPanel.visible { transform: translateY(0); }
+  #toggleList { display: none; }
+  #solarStatus { display: none; }
+  #issTelemetry { display: none; }
+  #locationBar { max-width: 90vw; }
+  #viewModes { bottom: 12px; }
+  .topbar-right .obj-count { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     BOOT OVERLAY
+     ═══════════════════════════════════════════════════ -->
+<div id="bootOverlay">
+  <div class="boot-logo">ZENITH</div>
+  <div class="boot-sub">The Celestial Eye</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN CANVAS
+     ═══════════════════════════════════════════════════ -->
+<canvas id="mainCanvas"></canvas>
+
+<!-- ═══════════════════════════════════════════════════
+     TOPBAR
+     ═══════════════════════════════════════════════════ -->
+<div id="topbar">
+  <div class="wordmark">ZENITH</div>
+  <div class="topbar-right">
+    <div class="obj-count" id="objCount"></div>
+    <div class="utc-clock" id="utcClock"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     LOCATION BAR
+     ═══════════════════════════════════════════════════ -->
+<div id="locationBar">
+  <span class="loc-label">Location</span>
+  <input type="text" id="locationInput" placeholder="Search city…" autocomplete="off">
+  <button class="loc-btn" id="gpsBtn" title="Use GPS">GPS</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     VIEW MODE PILLS
+     ═══════════════════════════════════════════════════ -->
+<div id="viewModes">
+  <button class="view-btn active" data-view="globe">Globe</button>
+  <button class="view-btn" data-view="skymap">Sky Map</button>
+  <button class="view-btn" data-view="radar">Radar</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     TOGGLE LIST BUTTON
+     ═══════════════════════════════════════════════════ -->
+<div id="toggleList">☰</div>
+
+<!-- ═══════════════════════════════════════════════════
+     LEFT PANEL — Object List
+     ═══════════════════════════════════════════════════ -->
+<div id="leftPanel">
+  <div class="panel-header">
+    <span class="panel-title">Objects</span>
+    <button class="panel-close" id="closeList">✕</button>
+  </div>
+  <div class="filter-bar" id="filterBar"></div>
+  <div class="obj-list" id="objList"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     RIGHT PANEL — Detail Card
+     ═══════════════════════════════════════════════════ -->
+<div id="rightPanel">
+  <button class="detail-close" id="closeDetail">✕</button>
+  <div id="detailContent"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SOLAR SYSTEM STATUS — bottom left
+     ═══════════════════════════════════════════════════ -->
+<div id="solarStatus"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     ISS TELEMETRY — floating top right
+     ═══════════════════════════════════════════════════ -->
+<div id="issTelemetry">
+  <div class="iss-label">ISS Telemetry</div>
+  <div class="iss-val" id="issSpeed">—</div>
+  <div class="iss-val" id="issAlt">—</div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   ZENITH — The Celestial Eye
+   A real-time cosmic radar by design.
+   
+   Note: GPS requires localhost or HTTPS.
+   ISS API (api.wheretheiss.at) requires internet; falls back to simulation.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// ─── CONSTANTS & CONFIGURATION ────────────────────────────────────────
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+const TWO_PI = Math.PI * 2;
+const EARTH_R = 6371; // km
+
+// Default location: Chennai, India
+let observer = { lat: 12.9249, lon: 80.1000, alt: 0, name: 'Chennai' };
+
+// ─── STAR CATALOG (FK5 J2000) ─────────────────────────────────────────
+const STARS = [
+  { name: 'Sirius',     ra: 101.287, dec: -16.716, mag: -1.46 },
+  { name: 'Canopus',    ra: 95.988,  dec: -52.696, mag: -0.74 },
+  { name: 'Arcturus',   ra: 213.915, dec: 19.182,  mag: -0.05 },
+  { name: 'Vega',       ra: 279.235, dec: 38.784,  mag: 0.03  },
+  { name: 'Capella',    ra: 79.172,  dec: 45.998,  mag: 0.08  },
+  { name: 'Rigel',      ra: 78.634,  dec: -8.202,  mag: 0.13  },
+  { name: 'Procyon',    ra: 114.825, dec: 5.225,   mag: 0.34  },
+  { name: 'Betelgeuse', ra: 88.793,  dec: 7.407,   mag: 0.42  },
+  { name: 'Altair',     ra: 297.695, dec: 8.868,   mag: 0.77  },
+  { name: 'Aldebaran',  ra: 68.980,  dec: 16.509,  mag: 0.87  },
+  { name: 'Antares',    ra: 247.352, dec: -26.432, mag: 1.09  },
+  { name: 'Spica',      ra: 201.298, dec: -11.161, mag: 1.04  },
+  { name: 'Pollux',     ra: 116.329, dec: 28.026,  mag: 1.14  },
+  { name: 'Fomalhaut',  ra: 344.413, dec: -29.622, mag: 1.16  },
+  { name: 'Deneb',      ra: 310.358, dec: 45.280,  mag: 1.25  },
+  { name: 'Regulus',    ra: 152.093, dec: 11.967,  mag: 1.36  },
+];
+
+// Constellation lines
+const CONSTELLATIONS = [
+  { name: 'Summer Triangle', stars: ['Vega', 'Deneb', 'Altair'], color: 'rgba(150,180,255,0.4)' },
+  { name: 'Orion Belt',      stars: ['Rigel', 'Betelgeuse'],     color: 'rgba(255,200,100,0.35)' },
+];
+
+// Planets (mean orbital elements from J2000)
+const PLANETS = [
+  { name: 'Mercury', M0: 174.795, Md: 4.09233,  inc: 7.0,   type: 'planet', desc: 'Smallest planet, closest to Sun' },
+  { name: 'Venus',   M0: 50.416,  Md: 1.60213,  inc: 3.39,  type: 'planet', desc: 'Earth\'s twin, hottest planet' },
+  { name: 'Mars',    M0: 19.373,  Md: 0.52402,  inc: 1.85,  type: 'planet', desc: 'The Red Planet' },
+  { name: 'Jupiter', M0: 19.665,  Md: 0.08309,  inc: 1.31,  type: 'planet', desc: 'Largest planet in the Solar System' },
+  { name: 'Saturn',  M0: 317.645, Md: 0.03347,  inc: 2.49,  type: 'planet', desc: 'The Ringed Planet' },
+];
+
+// Simulated satellites
+const SATELLITES = [
+  { name: 'Hubble',      alt: 540,  inc: 28.5,  period: 5580, phase: 0,    desc: 'Space telescope in LEO' },
+  { name: 'NOAA-19',     alt: 870,  inc: 99.2,  period: 6120, phase: 0.4,  desc: 'Weather observation satellite' },
+  { name: 'Sentinel-2A', alt: 786,  inc: 98.6,  period: 6000, phase: 0.8,  desc: 'ESA Earth observation' },
+  { name: 'Landsat-9',   alt: 705,  inc: 98.2,  period: 5940, phase: 1.2,  desc: 'USGS Earth imaging' },
+  { name: 'GOES-18',     alt: 680,  inc: 0.1,   period: 86400,phase: 1.6,  desc: 'Geostationary weather satellite' },
+  { name: 'Starlink',    alt: 550,  inc: 53.0,  period: 5400, phase: 2.0,  desc: 'SpaceX internet constellation' },
+  { name: 'GPS-IIF',     alt: 550,  inc: 55.0,  period: 43080,phase: 2.4,  desc: 'Navigation satellite' },
+  { name: 'Terra',       alt: 705,  inc: 98.1,  period: 5940, phase: 2.8,  desc: 'NASA Earth science' },
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────
+let currentView = 'globe';
+let selectedObj = null;
+let leftPanelOpen = false;
+let allObjects = [];
+let filters = { ISS: true, Satellites: true, Planets: true, Stars: true, Moon: true, Sun: true, Constellations: true, Orbits: true };
+let issData = null;
+let issFallback = false;
+let globeRotX = 0, globeRotY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartRotX = 0, dragStartRotY = 0;
+let animFrame = 0;
+let starField = [];
+let constellationDrawProgress = 0;
+let radarAngle = 0;
+let canvasTransition = 1;
+let bootDone = false;
+
+// ─── CANVAS SETUP ─────────────────────────────────────────────────────
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ─── STAR FIELD (background) ──────────────────────────────────────────
+function initStarField() {
+  starField = [];
+  for (let i = 0; i < 300; i++) {
+    starField.push({
+      x: Math.random(),
+      y: Math.random(),
+      size: 0.3 + Math.random() * 1.2,
+      speed: 0.3 + Math.random() * 0.7,
+      phase: Math.random() * TWO_PI,
+      warm: Math.random() > 0.5,
+      layer: Math.floor(Math.random() * 3),
+    });
+  }
+}
+initStarField();
+
+function drawStarField(t) {
+  const w = window.innerWidth, h = window.innerHeight;
+  for (const s of starField) {
+    const parallax = [0, 0.0001, 0.0003][s.layer];
+    const ox = s.x * w + Math.sin(t * 0.0001) * parallax * w;
+    const oy = s.y * h + Math.cos(t * 0.00008) * parallax * h;
+    const px = ((ox % w) + w) % w;
+    const py = ((oy % h) + h) % h;
+    const flicker = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * 0.002 * s.speed + s.phase));
+    ctx.globalAlpha = flicker * 0.6;
+    ctx.fillStyle = s.warm ? '#ffe8c0' : '#c0d8ff';
+    ctx.beginPath();
+    ctx.arc(px, py, s.size, 0, TWO_PI);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ASTRONOMY ENGINE — Jean Meeus Astronomical Algorithms
+// ═══════════════════════════════════════════════════════════════════════
+
+function getJD(date) {
+  return date.getTime() / 86400000 + 2440587.5;
+}
+
+function getGMST(jd) {
+  const T = (jd - 2451545) / 36525;
+  let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * T * T;
+  return ((gmst % 360) + 360) % 360;
+}
+
+function getLST(jd, lon) {
+  return ((getGMST(jd) + lon) % 360 + 360) % 360;
+}
+
+function eqToHz(ra, dec, lat, lon, jd) {
+  const lst = getLST(jd, lon);
+  let H = (lst - ra + 360) % 360;
+  if (H > 180) H -= 360;
+  const Hrad = H * DEG, dRad = dec * DEG, lRad = lat * DEG;
+  const sinAlt = Math.sin(dRad) * Math.sin(lRad) + Math.cos(dRad) * Math.cos(lRad) * Math.cos(Hrad);
+  const alt = Math.asin(sinAlt) * RAD;
+  const cosAz = (Math.sin(dRad) - sinAlt * Math.sin(lRad)) / (Math.cos(Math.asin(sinAlt)) * Math.cos(lRad));
+  let az = Math.acos(Math.max(-1, Math.min(1, cosAz))) * RAD;
+  if (Math.sin(Hrad) > 0) az = 360 - az;
+  return { alt, az };
+}
+
+// Solar position — Astronomical Almanac low-precision
+function getSunPosition(jd) {
+  const n = jd - 2451545;
+  let L = (280.460 + 0.9856474 * n) % 360;
+  if (L < 0) L += 360;
+  const g = (357.528 + 0.9856003 * n) * DEG;
+  const lambda = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * DEG;
+  const epsilon = (23.439 - 0.0000004 * n) * DEG;
+  const ra = Math.atan2(Math.cos(epsilon) * Math.sin(lambda), Math.cos(lambda)) * RAD;
+  const dec = Math.asin(Math.sin(epsilon) * Math.sin(lambda)) * RAD;
+  return { ra: (ra + 360) % 360, dec, name: 'Sun', type: 'sun', mag: -26.74, desc: 'Our star — center of the Solar System' };
+}
+
+// Lunar position — ELP2000 truncated
+function getMoonPosition(jd) {
+  const T = (jd - 2451545) / 36525;
+  const Lp = (218.3164 + 481267.8812 * T) % 360;
+  const Mm = (134.9634 + 477198.8676 * T) * DEG;
+  const D  = (297.8502 + 445267.1115 * T) * DEG;
+  const F  = (93.2721 + 483202.0175 * T) * DEG;
+  let lam = Lp + 6.289 * Math.sin(Mm) + 1.274 * Math.sin(2 * D - Mm) + 0.658 * Math.sin(2 * D);
+  const beta = -5.128 * Math.sin(F);
+  const lamRad = lam * DEG, betRad = beta * DEG;
+  const eps = 23.439 * DEG;
+  const ra = Math.atan2(Math.sin(lamRad) * Math.cos(eps) - Math.tan(betRad) * Math.sin(eps), Math.cos(lamRad)) * RAD;
+  const dec = Math.asin(Math.sin(betRad) * Math.cos(eps) + Math.cos(betRad) * Math.sin(eps) * Math.sin(lamRad)) * RAD;
+  // Moon phase
+  const sunPos = getSunPosition(jd);
+  let elong = lam - (sunPos.ra);
+  elong = ((elong % 360) + 360) % 360;
+  const age = elong / 12.1907; // days approx
+  const illum = (1 - Math.cos(elong * DEG)) / 2 * 100;
+  let phaseName = 'New Moon';
+  if (elong > 10 && elong <= 80) phaseName = 'Waxing Crescent';
+  else if (elong > 80 && elong <= 100) phaseName = 'First Quarter';
+  else if (elong > 100 && elong <= 170) phaseName = 'Waxing Gibbous';
+  else if (elong > 170 && elong <= 190) phaseName = 'Full Moon';
+  else if (elong > 190 && elong <= 260) phaseName = 'Waning Gibbous';
+  else if (elong > 260 && elong <= 280) phaseName = 'Last Quarter';
+  else if (elong > 280 && elong <= 350) phaseName = 'Waning Crescent';
+  return { ra: (ra + 360) % 360, dec, name: 'Moon', type: 'moon', mag: -12.6,
+    desc: `${phaseName} · ${illum.toFixed(0)}% illuminated`, phaseName, illum, phaseAngle: elong };
+}
+
+// Planet positions — mean orbital elements
+function getPlanetPosition(planet, jd) {
+  const n = jd - 2451545;
+  const M = (planet.M0 + planet.Md * n) % 360;
+  const ra = ((M + 360) % 360);
+  const dec = planet.inc * Math.sin(M * DEG);
+  return { ra, dec, name: planet.name, type: 'planet', mag: 1.0, desc: planet.desc };
+}
+
+// Satellite simulation
+function getSatPosition(sat, t) {
+  const period = sat.period;
+  const frac = ((t / 1000 + sat.phase * 1000) % period) / period;
+  const angle = frac * TWO_PI;
+  const lat = sat.inc * Math.sin(angle);
+  const lon = ((frac * 360 + t * 0.001) % 360) - 180;
+  return { lat, lon, alt: sat.alt, name: sat.name, type: 'satellite', desc: sat.desc };
+}
+
+// ISS azimuth/elevation from observer
+function issAzEl(issLat, issLon, issAlt) {
+  const dLat = (issLat - observer.lat) * DEG;
+  const dLon = (issLon - observer.lon) * DEG;
+  const dx = EARTH_R * dLon * Math.cos(observer.lat * DEG);
+  const dy = EARTH_R * dLat;
+  const dz = issAlt - observer.alt;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const el = Math.atan2(dz, Math.sqrt(dx * dx + dy * dy)) * RAD;
+  let az = Math.atan2(dx, dy) * RAD;
+  az = ((az % 360) + 360) % 360;
+  return { az, alt: el, dist };
+}
+
+// Satellite azimuth/elevation from observer
+function satAzEl(satLat, satLon, satAlt) {
+  return issAzEl(satLat, satLon, satAlt);
+}
+
+// Compute all objects
+function computeObjects(now) {
+  const jd = getJD(now);
+  const t = now.getTime();
+  const objects = [];
+
+  // Sun
+  if (filters.Sun) {
+    const sun = getSunPosition(jd);
+    const hz = eqToHz(sun.ra, sun.dec, observer.lat, observer.lon, jd);
+    objects.push({ ...sun, ...hz, distance: '149.6M km' });
+  }
+
+  // Moon
+  if (filters.Moon) {
+    const moon = getMoonPosition(jd);
+    const hz = eqToHz(moon.ra, moon.dec, observer.lat, observer.lon, jd);
+    objects.push({ ...moon, ...hz, distance: '384,400 km' });
+  }
+
+  // Planets
+  if (filters.Planets) {
+    for (const p of PLANETS) {
+      const pos = getPlanetPosition(p, jd);
+      const hz = eqToHz(pos.ra, pos.dec, observer.lat, observer.lon, jd);
+      objects.push({ ...pos, ...hz, distance: '—' });
+    }
+  }
+
+  // Stars
+  if (filters.Stars) {
+    for (const s of STARS) {
+      const hz = eqToHz(s.ra, s.dec, observer.lat, observer.lon, jd);
+      objects.push({ ...s, ...hz, type: 'star', desc: `Magnitude ${s.mag.toFixed(2)}`, distance: '—' });
+    }
+  }
+
+  // ISS
+  if (filters.ISS && issData) {
+    const hz = issAzEl(issData.latitude, issData.longitude, issData.altitude);
+    objects.push({
+      name: 'ISS', type: 'iss', mag: -3.5,
+      desc: 'International Space Station',
+      ...hz,
+      lat: issData.latitude, lon: issData.longitude,
+      issAlt: issData.altitude,
+      speed: issData.velocity,
+      distance: hz.dist.toFixed(0) + ' km',
+    });
+  }
+
+  // Satellites
+  if (filters.Satellites) {
+    for (const sat of SATELLITES) {
+      const pos = getSatPosition(sat, t);
+      const hz = satAzEl(pos.lat, pos.lon, pos.alt);
+      objects.push({
+        name: sat.name, type: 'satellite', mag: 3.0,
+        desc: sat.desc, ...hz,
+        lat: pos.lat, lon: pos.lon,
+        satAlt: pos.alt,
+        distance: hz.dist.toFixed(0) + ' km',
+      });
+    }
+  }
+
+  allObjects = objects;
+  return objects;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ISS FETCH
+// ═══════════════════════════════════════════════════════════════════════
+let issTrack = [];
+let issLastFetch = 0;
+
+async function fetchISS() {
+  try {
+    const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    issData = { latitude: data.latitude, longitude: data.longitude, altitude: data.altitude, velocity: data.velocity / 3600 };
+    issFallback = false;
+    issTrack.push({ lat: data.latitude, lon: data.longitude, t: Date.now() });
+    if (issTrack.length > 120) issTrack.shift();
+  } catch (e) {
+    issFallback = true;
+    const t = Date.now() / 1000;
+    const lat = 51.6 * Math.sin(t / 5580 * TWO_PI);
+    const lon = ((t * 360 / 5580) % 360) - 180;
+    issData = { latitude: lat, longitude: lon, altitude: 420, velocity: 7.66 };
+    issTrack.push({ lat, lon, t: Date.now() });
+    if (issTrack.length > 120) issTrack.shift();
+  }
+}
+
+// ISS pass predictions (simplified)
+function predictISSPasses() {
+  const passes = [];
+  const now = Date.now();
+  for (let i = 1; i <= 5; i++) {
+    const passTime = new Date(now + i * 5580 * 1000 + Math.random() * 3600000);
+    const dur = 2 + Math.floor(Math.random() * 6);
+    const maxEl = 10 + Math.floor(Math.random() * 70);
+    passes.push({
+      time: passTime.toISOString().substr(11, 5) + ' UTC',
+      date: passTime.toISOString().substr(5, 5),
+      duration: dur + 'min',
+      maxEl: maxEl + '°',
+    });
+  }
+  return passes;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// GLOBE RENDERER — Continental data & rendering
+// ═══════════════════════════════════════════════════════════════════════
+
+// High-detail continent coastline polygons [lon, lat] — traced from Natural Earth reference
+const CONTINENTS = {
+  northAmerica: [
+    [-168,72],[-162,70],[-157,71],[-152,70],[-148,70],[-143,69],[-141,69],[-141,60],
+    [-139,60],[-138,59],[-136,58],[-135,57],[-133,56],[-131,55],[-130,54],[-130,52],
+    [-128,50],[-126,49],[-124,48],[-123,46],[-124,43],[-122,42],[-121,39],[-120,36],
+    [-118,34],[-117,33],[-116,32],[-114,32],[-112,31],[-110,31],[-108,31],[-106,31],
+    [-105,30],[-104,29],[-103,29],[-101,29],[-100,28],[-98,27],[-97,26],[-97,25],
+    [-97,22],[-96,20],[-95,19],[-94,18],[-93,17],[-91,16],[-90,16],[-89,16],
+    [-88,16],[-87,15],[-86,14],[-85,13],[-84,11],[-83,10],[-82,9],[-80,8],
+    [-79,9],[-78,9],[-77,8],[-76,8],[-75,9],[-76,11],[-78,12],[-80,14],
+    [-81,15],[-82,16],[-83,17],[-84,18],[-85,19],[-86,20],[-87,21],[-87,22],
+    [-88,22],[-89,22],[-90,22],[-90,24],[-90,26],[-89,28],[-88,29],[-87,30],
+    [-85,30],[-84,30],[-83,29],[-82,28],[-81,27],[-80,26],[-80,25],[-81,25],
+    [-82,25],[-82,27],[-81,29],[-80,30],[-80,31],[-79,33],[-78,34],[-77,35],
+    [-76,36],[-76,37],[-76,38],[-75,39],[-74,40],[-73,41],[-72,41],[-71,42],
+    [-70,42],[-70,43],[-68,44],[-67,45],[-66,44],[-65,44],[-64,45],[-63,46],
+    [-61,46],[-60,47],[-60,48],[-59,48],[-58,49],[-56,48],[-55,48],[-55,50],
+    [-56,51],[-57,52],[-59,53],[-60,54],[-62,55],[-64,56],[-66,58],[-68,59],
+    [-70,60],[-72,61],[-75,62],[-78,63],[-80,63],[-82,64],[-85,65],[-88,66],
+    [-90,67],[-92,68],[-95,69],[-100,70],[-105,71],[-110,72],[-115,73],
+    [-120,73],[-130,73],[-140,72],[-150,72],[-155,71],[-160,72],[-168,72]
+  ],
+  southAmerica: [
+    [-77,8],[-75,7],[-73,7],[-72,8],[-70,8],[-68,10],[-66,11],[-64,10],
+    [-62,11],[-60,11],[-59,9],[-58,7],[-57,6],[-55,6],[-54,4],[-52,4],
+    [-51,2],[-50,1],[-49,0],[-49,-2],[-48,-3],[-45,-3],[-43,-3],[-41,-3],
+    [-39,-4],[-38,-5],[-36,-6],[-35,-7],[-35,-9],[-35,-11],[-37,-13],
+    [-38,-14],[-39,-16],[-40,-18],[-40,-20],[-41,-21],[-42,-22],[-43,-23],
+    [-44,-23],[-46,-24],[-47,-25],[-48,-27],[-49,-28],[-50,-29],[-51,-30],
+    [-52,-32],[-53,-33],[-53,-34],[-54,-34],[-56,-35],[-57,-36],[-58,-37],
+    [-60,-38],[-62,-39],[-63,-40],[-64,-41],[-65,-42],[-65,-44],[-66,-45],
+    [-67,-46],[-67,-47],[-68,-48],[-68,-50],[-69,-51],[-69,-52],[-70,-53],
+    [-70,-54],[-69,-55],[-68,-55],[-67,-54],[-66,-53],[-65,-53],[-64,-54],
+    [-65,-55],[-67,-56],[-69,-56],[-70,-55],[-72,-54],[-73,-53],[-74,-52],
+    [-74,-50],[-75,-49],[-75,-47],[-74,-45],[-73,-43],[-72,-41],[-72,-39],
+    [-71,-37],[-71,-34],[-71,-32],[-71,-30],[-70,-28],[-70,-26],[-70,-24],
+    [-70,-22],[-70,-20],[-70,-18],[-70,-16],[-75,-15],[-76,-14],[-76,-12],
+    [-77,-10],[-78,-7],[-78,-5],[-79,-3],[-80,-2],[-80,0],[-80,2],[-78,3],
+    [-77,5],[-77,7],[-77,8]
+  ],
+  europe: [
+    [-9,36],[-8,37],[-9,38],[-9,40],[-8,42],[-9,43],[-7,43],[-5,44],
+    [-4,43],[-2,44],[-1,43],[0,43],[1,43],[3,43],[4,44],[5,44],[6,44],
+    [6,46],[7,47],[8,47],[7,48],[6,49],[6,50],[4,51],[3,51],[2,51],
+    [4,52],[5,53],[6,54],[7,54],[8,54],[9,54],[9,55],[10,55],[10,57],
+    [11,57],[11,58],[12,56],[13,55],[14,54],[14,53],[16,54],[17,55],
+    [18,56],[18,57],[17,58],[16,57],[14,58],[13,58],[12,59],[12,60],
+    [12,62],[14,63],[15,64],[16,65],[17,66],[18,67],[18,68],[19,69],
+    [20,69],[22,69],[24,69],[26,69],[28,70],[30,70],[30,68],[28,66],
+    [27,65],[25,64],[24,62],[23,60],[24,59],[25,58],[26,57],[27,57],
+    [28,57],[28,55],[28,54],[29,53],[30,51],[31,50],[33,49],[35,48],
+    [37,47],[39,47],[40,46],[40,44],[40,42],[41,42],[41,41],[40,40],
+    [36,40],[35,39],[33,38],[30,37],[28,37],[26,36],[25,35],[24,35],
+    [23,36],[22,37],[21,38],[20,38],[19,39],[18,40],[16,40],[15,39],
+    [14,38],[13,38],[12,38],[11,37],[14,37],[15,37],[16,38],[17,39],
+    [18,40],[16,41],[14,41],[13,41],[12,42],[11,44],[10,44],[9,44],
+    [8,44],[7,44],[6,43],[5,43],[4,44],[3,43],[1,43],[0,43],
+    [-2,43],[-3,43],[-5,43],[-6,44],[-7,43],[-8,43],[-9,40],
+    [-9,38],[-8,37],[-9,36]
+  ],
+  africa: [
+    [-17,15],[-17,17],[-16,19],[-16,21],[-17,22],[-17,24],[-15,26],[-13,28],
+    [-10,30],[-8,32],[-6,33],[-5,34],[-4,35],[-2,35],[0,36],[2,37],[4,37],
+    [6,37],[8,37],[10,37],[11,37],[10,34],[11,33],[12,33],[12,32],[13,32],
+    [14,31],[15,31],[16,31],[18,31],[20,31],[22,32],[24,32],[25,31],
+    [28,31],[30,31],[32,31],[33,30],[34,29],[34,28],[35,27],[36,25],
+    [36,23],[37,22],[38,20],[39,18],[40,16],[41,15],[42,14],[43,12],
+    [44,11],[45,11],[46,10],[47,9],[48,8],[49,7],[50,5],[49,3],
+    [48,2],[47,0],[46,-1],[45,-2],[44,-3],[43,-5],[42,-6],[41,-8],
+    [40,-10],[40,-12],[39,-14],[38,-16],[37,-18],[36,-20],[35,-22],
+    [35,-24],[34,-26],[33,-28],[32,-29],[31,-30],[30,-31],[29,-32],
+    [28,-33],[27,-33],[26,-34],[25,-34],[23,-34],[21,-34],[19,-34],
+    [18,-33],[17,-32],[16,-30],[15,-28],[14,-26],[13,-24],[12,-22],
+    [12,-18],[12,-16],[12,-14],[12,-12],[11,-10],[10,-8],[10,-6],
+    [10,-4],[9,-2],[9,0],[9,2],[8,4],[7,5],[6,5],[5,5],[4,5],
+    [3,6],[2,6],[1,6],[0,6],[-1,5],[-2,5],[-3,5],[-5,5],
+    [-6,5],[-7,5],[-8,6],[-9,6],[-10,7],[-11,7],[-12,8],[-13,9],
+    [-14,10],[-15,11],[-16,12],[-17,13],[-17,14],[-17,15]
+  ],
+  asia: [
+    [28,70],[30,70],[33,69],[36,68],[40,67],[42,66],[45,66],[48,67],
+    [50,67],[52,67],[55,67],[58,67],[60,68],[63,68],[65,68],[68,68],
+    [70,69],[73,69],[76,69],[80,69],[85,69],[90,70],[95,70],[100,70],
+    [105,70],[110,70],[115,70],[120,70],[125,70],[130,70],[135,70],
+    [140,70],[145,68],[150,66],[155,64],[160,62],[162,60],[163,58],
+    [162,56],[160,55],[158,54],[155,54],[152,55],[150,56],[148,58],
+    [145,60],[143,60],[141,58],[140,55],[140,52],[142,50],[143,48],
+    [143,46],[141,44],[139,43],[137,42],[135,40],[134,38],[132,36],
+    [130,35],[129,36],[128,37],[127,38],[126,38],[126,37],[127,35],
+    [129,34],[130,33],[129,32],[128,33],[127,35],[126,36],[125,37],
+    [124,36],[122,35],[121,33],[121,31],[122,30],[121,28],[120,26],
+    [119,24],[118,22],[117,21],[116,20],[114,19],[112,18],[110,18],
+    [108,17],[107,16],[106,16],[105,15],[105,13],[105,11],[104,10],
+    [103,8],[103,6],[103,4],[103,2],[104,1],[105,0],[106,-1],
+    [106,-3],[106,-5],[107,-6],[108,-7],[110,-7],[112,-7],[114,-8],
+    [116,-8],[118,-8],[120,-9],[121,-10],[119,-9],[117,-8],[115,-8],
+    [113,-8],[111,-7],[110,-7],[108,-6],[106,-5],[105,-3],[104,-1],
+    [103,1],[102,3],[101,5],[100,7],[99,8],[98,10],[97,11],[98,13],
+    [99,14],[99,16],[98,17],[97,17],[96,17],[95,18],[94,19],[93,20],
+    [92,21],[91,22],[90,22],[89,22],[88,22],[87,22],[86,22],[85,22],
+    [84,22],[83,22],[82,21],[81,20],[80,18],[79,16],[80,14],[80,12],
+    [80,10],[80,8],[79,7],[78,7],[77,8],[76,9],[75,10],[74,11],
+    [73,13],[73,15],[73,17],[72,19],[71,21],[70,22],[69,23],[68,24],
+    [67,25],[66,26],[65,26],[64,26],[63,26],[62,25],[61,25],[60,24],
+    [58,24],[57,24],[56,25],[55,25],[54,25],[53,24],[52,24],[51,24],
+    [50,25],[49,26],[49,27],[48,28],[48,29],[47,30],[45,29],[44,29],
+    [43,28],[42,28],[41,27],[40,28],[39,29],[38,30],[36,31],[35,32],
+    [35,33],[35,34],[36,35],[36,36],[36,37],[35,38],[35,39],[36,40],
+    [37,41],[38,41],[39,42],[40,42],[40,43],[40,44],[40,46],
+    [39,47],[37,47],[35,48],[33,49],[31,50],[30,51],[29,53],
+    [28,54],[28,55],[28,57],[27,57],[26,58],[25,60],[24,62],
+    [25,64],[27,65],[28,66],[30,68],[28,70]
+  ],
+  india: [
+    [68,24],[69,23],[70,22],[71,21],[72,19],[73,17],[73,15],[73,13],
+    [74,11],[75,10],[76,9],[77,8],[78,7],[79,7],[80,8],[80,10],
+    [80,12],[80,14],[80,16],[79,17],[80,18],[81,20],[82,21],[83,22],
+    [84,22],[85,22],[86,22],[87,22],[88,22],[89,22],[90,22],[91,22],
+    [92,21],[93,20],[94,19],[93,18],[92,18],[91,19],[90,20],[89,21],
+    [88,22],[87,23],[86,23],[85,24],[84,24],[83,23],[82,22],[82,20],
+    [82,18],[81,17],[80,16],[80,14],[80,12],[80,10],[79,8],[78,8],
+    [77,8],[76,9],[76,10],[75,11],[74,13],[73,15],[73,17],[72,19],
+    [72,20],[71,21],[70,22],[69,23],[68,24]
+  ],
+  arabianPeninsula: [
+    [36,31],[37,29],[38,28],[39,27],[40,26],[42,24],[43,22],[44,20],
+    [45,18],[45,16],[44,14],[43,13],[43,12],[44,12],[45,13],[46,14],
+    [48,16],[50,18],[51,19],[52,20],[53,21],[54,22],[55,23],[56,24],
+    [56,25],[55,25],[54,25],[53,24],[52,24],[51,24],[50,25],[49,26],
+    [49,27],[48,28],[48,29],[47,30],[45,29],[44,29],[43,28],[42,28],
+    [41,27],[40,28],[39,29],[38,30],[36,31]
+  ],
+  australia: [
+    [114,-22],[114,-24],[114,-26],[115,-28],[115,-30],[115,-32],
+    [116,-33],[117,-34],[118,-35],[120,-35],[122,-34],[124,-34],
+    [126,-33],[128,-33],[129,-32],[130,-32],[131,-31],[132,-32],
+    [133,-33],[134,-34],[135,-35],[136,-35],[137,-35],[138,-35],
+    [139,-36],[140,-37],[142,-38],[145,-38],[147,-38],[148,-39],
+    [150,-38],[151,-37],[152,-35],[153,-33],[153,-31],[153,-29],
+    [153,-27],[152,-26],[151,-25],[150,-24],[149,-22],[148,-20],
+    [147,-19],[146,-18],[145,-17],[144,-15],[143,-14],[142,-13],
+    [141,-13],[140,-14],[139,-15],[138,-14],[137,-14],[136,-13],
+    [135,-13],[134,-12],[133,-12],[132,-12],[131,-12],[130,-13],
+    [129,-14],[128,-15],[127,-14],[126,-14],[125,-14],[124,-15],
+    [123,-16],[122,-17],[121,-18],[119,-19],[118,-20],[116,-21],
+    [115,-21],[114,-22]
+  ],
+  greenland: [
+    [-45,60],[-47,61],[-49,62],[-51,63],[-53,64],[-54,66],[-54,68],
+    [-53,70],[-51,71],[-49,72],[-47,73],[-44,74],[-42,75],[-40,76],
+    [-38,77],[-35,77],[-30,78],[-25,78],[-22,77],[-20,76],[-18,75],
+    [-18,73],[-19,72],[-20,71],[-22,70],[-24,69],[-26,68],[-28,67],
+    [-30,66],[-32,65],[-35,64],[-38,63],[-40,62],[-42,61],[-45,60]
+  ],
+  japan: [
+    [130,31],[131,32],[132,33],[133,34],[134,34],[135,35],[136,36],
+    [137,37],[138,37],[139,36],[140,36],[140,38],[140,39],[141,40],
+    [141,41],[142,42],[143,43],[144,44],[145,45],[144,44],[143,43],
+    [142,42],[141,41],[141,40],[140,39],[140,38],[139,37],[138,37],
+    [137,36],[136,35],[135,34],[134,34],[133,33],[132,32],[131,31],
+    [130,31]
+  ],
+  uk: [
+    [-6,50],[-5,50],[-4,51],[-3,51],[-2,51],[-1,51],[0,51],[1,52],
+    [1,53],[0,54],[0,55],[-1,55],[-2,56],[-3,57],[-4,58],[-5,58],
+    [-6,58],[-6,57],[-5,56],[-5,55],[-5,54],[-5,53],[-4,52],
+    [-5,51],[-6,50]
+  ],
+  madagascar: [
+    [44,-13],[45,-14],[47,-16],[48,-18],[49,-20],[49,-22],[48,-24],
+    [47,-25],[45,-25],[44,-24],[43,-23],[43,-21],[43,-19],[43,-17],
+    [43,-15],[44,-13]
+  ],
+  newZealand: [
+    [173,-35],[174,-36],[176,-37],[177,-38],[178,-39],[177,-40],
+    [176,-41],[175,-42],[174,-43],[172,-44],[170,-45],[169,-46],
+    [168,-46],[167,-45],[167,-44],[168,-43],[169,-42],[170,-41],
+    [171,-40],[172,-39],[172,-37],[173,-36],[173,-35]
+  ],
+  antarctica: [
+    [-180,-70],[-165,-71],[-150,-72],[-135,-73],[-120,-74],[-105,-75],
+    [-90,-77],[-75,-78],[-60,-79],[-45,-78],[-30,-77],[-15,-75],
+    [0,-72],[15,-70],[30,-69],[45,-68],[60,-68],[75,-69],[90,-71],
+    [105,-70],[120,-69],[135,-70],[150,-71],[165,-72],[180,-70],
+    [180,-90],[-180,-90],[-180,-70]
+  ],
+};
+
+function latLonToGlobe(lat, lon, cx, cy, r, rotX, rotY) {
+  const phi = lat * DEG, lam = (lon - rotY) * DEG;
+  const cosLat = Math.cos(phi);
+  let x = cosLat * Math.sin(lam);
+  let y = -Math.sin(phi);
+  let z = cosLat * Math.cos(lam);
+  // Rotate around X axis (tilt)
+  const tilt = rotX * DEG;
+  const y2 = y * Math.cos(tilt) - z * Math.sin(tilt);
+  const z2 = y * Math.sin(tilt) + z * Math.cos(tilt);
+  if (z2 < -0.05) return null; // behind globe
+  return { x: cx + x * r, y: cy + y2 * r, z: z2 };
+}
+
+function drawGlobe(now, t) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.32;
+  const jd = getJD(now);
+
+  // Idle rotation
+  if (!isDragging) {
+    globeRotY += 0.008; // ~0.1 deg/s at 60fps
+  }
+
+  // ── Atmospheric glow ──
+  const atmGrad = ctx.createRadialGradient(cx, cy, r, cx, cy, r * 1.15);
+  atmGrad.addColorStop(0, 'rgba(40,120,255,0.12)');
+  atmGrad.addColorStop(0.4, 'rgba(40,120,255,0.04)');
+  atmGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = atmGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, r * 1.15, 0, TWO_PI); ctx.fill();
+
+  // ── Ocean sphere ──
+  const oceanGrad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.15, 0, cx, cy, r);
+  oceanGrad.addColorStop(0, '#1a3a5c');
+  oceanGrad.addColorStop(0.6, '#0e2240');
+  oceanGrad.addColorStop(1, '#050d1a');
+  ctx.fillStyle = oceanGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
+
+  // ── Grid lines ──
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  // Latitude lines
+  for (let lat = -60; lat <= 60; lat += 30) {
+    ctx.beginPath();
+    let started = false;
+    for (let lon = -180; lon <= 180; lon += 3) {
+      const p = latLonToGlobe(lat, lon, cx, cy, r, globeRotX, globeRotY);
+      if (p) { if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
+      else started = false;
+    }
+    ctx.stroke();
+  }
+  // Longitude lines
+  for (let lon = -180; lon < 180; lon += 30) {
+    ctx.beginPath();
+    let started = false;
+    for (let lat = -90; lat <= 90; lat += 3) {
+      const p = latLonToGlobe(lat, lon, cx, cy, r, globeRotX, globeRotY);
+      if (p) { if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
+      else started = false;
+    }
+    ctx.stroke();
+  }
+
+  // ── Continents ──
+  // Clip everything to the globe circle to prevent edge overflow
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 0.5, 0, TWO_PI);
+  ctx.clip();
+
+  for (const [name, coords] of Object.entries(CONTINENTS)) {
+    // Project all points, collecting visible segments
+    const projected = coords.map(([lon, lat]) => {
+      const p = latLonToGlobe(lat, lon, cx, cy, r, globeRotX, globeRotY);
+      return p; // null if behind
+    });
+
+    // Draw filled polygon using only visible points, connecting segments
+    const landGrad = ctx.createRadialGradient(cx - r * 0.15, cy - r * 0.15, r * 0.1, cx, cy, r);
+    landGrad.addColorStop(0, '#1a4525');
+    landGrad.addColorStop(0.5, '#163d20');
+    landGrad.addColorStop(1, '#0f2e15');
+    ctx.fillStyle = landGrad;
+    ctx.strokeStyle = 'rgba(50,120,60,0.15)';
+    ctx.lineWidth = 0.5;
+
+    // Collect segments of visible points
+    let segments = [];
+    let current = [];
+    for (let i = 0; i < projected.length; i++) {
+      const p = projected[i];
+      if (p && p.z > -0.1) {
+        current.push(p);
+      } else {
+        if (current.length > 0) { segments.push(current); current = []; }
+      }
+    }
+    if (current.length > 0) segments.push(current);
+
+    // If first and last segments should connect (polygon wraps around)
+    if (segments.length > 1 && projected[0] && projected[0].z > -0.1 &&
+        projected[projected.length - 1] && projected[projected.length - 1].z > -0.1) {
+      segments[0] = segments[segments.length - 1].concat(segments[0]);
+      segments.pop();
+    }
+
+    for (const seg of segments) {
+      if (seg.length < 3) continue;
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      for (let i = 1; i < seg.length; i++) {
+        ctx.lineTo(seg[i].x, seg[i].y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // ── Specular highlight ──
+  const specGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx - r * 0.3, cy - r * 0.3, r * 0.6);
+  specGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+  specGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = specGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
+
+  // ── Edge darkening ──
+  const edgeGrad = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r);
+  edgeGrad.addColorStop(0, 'transparent');
+  edgeGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = edgeGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
+
+  // ── Observer location marker ──
+  const obsP = latLonToGlobe(observer.lat, observer.lon, cx, cy, r, globeRotX, globeRotY);
+  if (obsP && obsP.z > 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(obsP.x, obsP.y, 3, 0, TWO_PI); ctx.fill();
+    ctx.font = '300 9px "DM Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${observer.lat.toFixed(1)}°, ${observer.lon.toFixed(1)}°`, obsP.x, obsP.y + 16);
+  }
+
+  // ── ISS on globe ──
+  if (issData && filters.ISS) {
+    // ISS orbit trail
+    if (filters.Orbits) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      let started = false;
+      for (const pt of issTrack) {
+        const p = latLonToGlobe(pt.lat, pt.lon, cx, cy, r, globeRotX, globeRotY);
+        if (p && p.z > 0) {
+          if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+        } else started = false;
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const issP = latLonToGlobe(issData.latitude, issData.longitude, cx, cy, r * 1.06, globeRotX, globeRotY);
+    if (issP && issP.z > -0.2) {
+      const issSel = selectedObj && selectedObj.name === 'ISS';
+      const sc = issSel ? 1.3 : 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(issP.x, issP.y, 3 * sc, 0, TWO_PI); ctx.fill();
+      ctx.font = '300 9px "DM Mono", monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.textAlign = 'center';
+      ctx.fillText('ISS', issP.x, issP.y - 10);
+    }
+  }
+
+  // ── Satellites on globe ──
+  if (filters.Satellites) {
+    for (const sat of SATELLITES) {
+      const pos = getSatPosition(sat, now.getTime());
+      const p = latLonToGlobe(pos.lat, pos.lon, cx, cy, r * 1.04, globeRotX, globeRotY);
+      if (p && p.z > 0) {
+        const isSel = selectedObj && selectedObj.name === sat.name;
+        ctx.fillStyle = isSel ? '#ffffff' : 'rgba(168,196,212,0.5)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, isSel ? 3 : 2, 0, TWO_PI); ctx.fill();
+      }
+    }
+  }
+
+  // ── Celestial objects projected on sky dome ──
+  for (const obj of allObjects) {
+    if (obj.type === 'iss' || obj.type === 'satellite') continue;
+    if (obj.alt <= 0) continue;
+    // Project on a dome above the globe
+    const skyR = r * 1.3;
+    const azRad = obj.az * DEG;
+    const altRad = obj.alt * DEG;
+    const projR = skyR * Math.cos(altRad);
+    const sx = cx + projR * Math.sin(azRad);
+    const sy = cy - projR * Math.cos(azRad) * 0.5 - skyR * Math.sin(altRad) * 0.3;
+
+    const isSel = selectedObj && selectedObj.name === obj.name;
+    let dotR = 2;
+    if (obj.type === 'sun') { dotR = 5; ctx.fillStyle = '#fff8e0'; }
+    else if (obj.type === 'moon') { dotR = 4; ctx.fillStyle = '#e0e8f0'; }
+    else if (obj.type === 'planet') { dotR = 3; ctx.fillStyle = 'rgba(168,196,212,0.7)'; }
+    else { dotR = Math.max(1.5, 4 - obj.mag); ctx.fillStyle = 'rgba(255,255,255,0.6)'; }
+
+    if (isSel) dotR *= 1.3;
+    ctx.beginPath(); ctx.arc(sx, sy, dotR, 0, TWO_PI); ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SKY MAP RENDERER — Circular polar projection
+// ═══════════════════════════════════════════════════════════════════════
+
+function drawSkyMap(now, t) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.38;
+
+  // Sky circle background
+  ctx.fillStyle = '#000000';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
+
+  // Altitude rings
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 0.5;
+  for (const altDeg of [30, 60]) {
+    const ringR = r * (1 - altDeg / 90);
+    ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, TWO_PI); ctx.stroke();
+  }
+
+  // Horizon circle
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.stroke();
+
+  // Cardinals
+  ctx.font = '300 10px "Inter", sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('N', cx, cy - r - 14);
+  ctx.fillText('S', cx, cy + r + 14);
+  ctx.fillText('E', cx + r + 14, cy);
+  ctx.fillText('W', cx - r - 14, cy);
+
+  // Helper: project az/alt to sky map coords
+  function skyProj(az, alt) {
+    if (alt < 0) return null;
+    const dist = r * (1 - alt / 90);
+    const azRad = az * DEG;
+    return { x: cx + dist * Math.sin(azRad), y: cy - dist * Math.cos(azRad) };
+  }
+
+  // Constellation lines with draw animation
+  if (filters.Constellations) {
+    constellationDrawProgress = Math.min(1, constellationDrawProgress + 0.008);
+    for (const con of CONSTELLATIONS) {
+      const points = [];
+      for (const sName of con.stars) {
+        const obj = allObjects.find(o => o.name === sName);
+        if (obj && obj.alt > 0) {
+          const p = skyProj(obj.az, obj.alt);
+          if (p) points.push(p);
+        }
+      }
+      if (points.length >= 2) {
+        ctx.strokeStyle = con.color;
+        ctx.lineWidth = 1;
+        // Compute total length for dash animation
+        let totalLen = 0;
+        for (let i = 1; i < points.length; i++) {
+          totalLen += Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
+        }
+        const drawLen = totalLen * constellationDrawProgress;
+        ctx.setLineDash([drawLen, totalLen]);
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        if (points.length > 2) ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // Draw objects
+  for (const obj of allObjects) {
+    if (obj.alt < 0) continue;
+    const p = skyProj(obj.az, obj.alt);
+    if (!p) continue;
+
+    const isSel = selectedObj && selectedObj.name === obj.name;
+    let dotR = 3;
+
+    if (obj.type === 'sun') {
+      dotR = 7;
+      const sunGlow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 12);
+      sunGlow.addColorStop(0, 'rgba(255,248,220,0.8)');
+      sunGlow.addColorStop(0.5, 'rgba(255,220,100,0.2)');
+      sunGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = sunGlow;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, TWO_PI); ctx.fill();
+      ctx.fillStyle = '#fff8e0';
+    } else if (obj.type === 'moon') {
+      dotR = 6;
+      ctx.fillStyle = '#e0e8f0';
+      ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, TWO_PI); ctx.fill();
+      // Phase shading
+      if (obj.phaseAngle !== undefined) {
+        const pa = obj.phaseAngle;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        if (pa < 180) {
+          ctx.arc(p.x, p.y, dotR, -Math.PI/2, Math.PI/2, false);
+          const k = Math.cos(pa * DEG);
+          ctx.ellipse(p.x, p.y, dotR * Math.abs(k), dotR, 0, Math.PI/2, -Math.PI/2, k > 0);
+        } else {
+          ctx.arc(p.x, p.y, dotR, Math.PI/2, -Math.PI/2, false);
+          const k = Math.cos(pa * DEG);
+          ctx.ellipse(p.x, p.y, dotR * Math.abs(k), dotR, 0, -Math.PI/2, Math.PI/2, k < 0);
+        }
+        ctx.fill();
+      }
+      continue; // already drawn
+    } else if (obj.type === 'iss') {
+      dotR = 4; ctx.fillStyle = '#ffffff';
+    } else if (obj.type === 'satellite') {
+      dotR = 2.5; ctx.fillStyle = 'rgba(168,196,212,0.6)';
+    } else if (obj.type === 'planet') {
+      dotR = 4; ctx.fillStyle = 'rgba(168,196,212,0.8)';
+    } else {
+      // Star — size by magnitude
+      dotR = Math.max(1.5, 4 - obj.mag * 0.8);
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(0.9, 0.4 + (2 - obj.mag) * 0.15)})`;
+    }
+
+    if (isSel) {
+      dotR *= 1.2;
+      ctx.fillStyle = '#ffffff';
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, TWO_PI); ctx.fill();
+
+    // Label (only above 15° altitude)
+    if (obj.alt > 15) {
+      ctx.font = '300 9px "DM Mono", monospace';
+      ctx.fillStyle = isSel ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(obj.name, p.x + dotR + 6, p.y);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RADAR RENDERER
+// ═══════════════════════════════════════════════════════════════════════
+
+function drawRadar(now, t) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.38;
+
+  radarAngle = (radarAngle + 0.012) % TWO_PI; // sweep speed
+
+  // Rings
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for (const frac of [0.25, 0.5, 0.75, 1.0]) {
+    ctx.beginPath(); ctx.arc(cx, cy, r * frac, 0, TWO_PI); ctx.stroke();
+  }
+
+  // Cross hairs
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+  ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+  ctx.stroke();
+
+  // Sweep trail — last 90° shows fading green
+  const sweepSpan = Math.PI / 2;
+  for (let i = 0; i < 60; i++) {
+    const frac = i / 60;
+    const angle = radarAngle - sweepSpan * frac;
+    const alpha = 0.06 * (1 - frac);
+    ctx.strokeStyle = `rgba(0,255,100,${alpha})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+    ctx.stroke();
+  }
+
+  // Leading edge
+  ctx.strokeStyle = 'rgba(0,255,100,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * Math.cos(radarAngle), cy + r * Math.sin(radarAngle));
+  ctx.stroke();
+
+  // Objects as dots
+  function radarProj(az, alt) {
+    if (alt < -10) return null;
+    const dist = r * Math.max(0, 1 - Math.max(0, alt) / 90);
+    const azRad = az * DEG;
+    return { x: cx + dist * Math.sin(azRad), y: cy - dist * Math.cos(azRad) };
+  }
+
+  for (const obj of allObjects) {
+    const p = radarProj(obj.az, obj.alt);
+    if (!p) continue;
+
+    let dotR = 3;
+    let color = 'rgba(0,255,100,0.5)';
+    if (obj.type === 'sun') { dotR = 5; color = 'rgba(255,220,100,0.6)'; }
+    else if (obj.type === 'moon') { dotR = 4; color = 'rgba(200,210,230,0.6)'; }
+    else if (obj.type === 'iss') { dotR = 4; color = 'rgba(0,255,100,0.8)'; }
+    else if (obj.type === 'satellite') { dotR = 2.5; color = 'rgba(0,255,100,0.4)'; }
+    else if (obj.type === 'planet') { dotR = 3.5; color = 'rgba(100,255,150,0.6)'; }
+    else { dotR = 2; color = 'rgba(0,255,100,0.3)'; }
+
+    const isSel = selectedObj && selectedObj.name === obj.name;
+    if (isSel) { dotR *= 1.3; color = 'rgba(0,255,100,0.9)'; }
+
+    // Glow
+    if (obj.alt > 0) {
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, dotR * 3);
+      glow.addColorStop(0, color);
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(p.x, p.y, dotR * 3, 0, TWO_PI); ctx.fill();
+    }
+
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, TWO_PI); ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI — Update functions
+// ═══════════════════════════════════════════════════════════════════════
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('utcClock').textContent =
+    now.toISOString().substr(11, 8) + ' UTC';
+}
+
+function updateObjCount() {
+  const total = allObjects.length;
+  const visible = allObjects.filter(o => o.alt > 0).length;
+  document.getElementById('objCount').textContent =
+    `${total} objects · ${visible} visible`;
+}
+
+function updateISSTelemetry() {
+  const el = document.getElementById('issTelemetry');
+  if (issData && filters.ISS) {
+    el.classList.add('visible');
+    document.getElementById('issSpeed').textContent =
+      `${(issData.velocity || 7.66).toFixed(2)} km/s`;
+    document.getElementById('issAlt').textContent =
+      `${(issData.altitude || 420).toFixed(0)} km alt`;
+  } else {
+    el.classList.remove('visible');
+  }
+}
+
+function updateSolarStatus() {
+  const container = document.getElementById('solarStatus');
+  const items = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn'];
+  const colors = {
+    Sun: '#fff8e0', Moon: '#c8d0e0', Mercury: '#b0b0b0', Venus: '#ffe8c0',
+    Mars: '#ffb0a0', Jupiter: '#ffd8a0', Saturn: '#ffe0b0'
+  };
+  let html = '';
+  for (const name of items) {
+    const obj = allObjects.find(o => o.name === name);
+    const alt = obj ? obj.alt.toFixed(0) + '°' : '—';
+    const c = colors[name] || '#a8c4d4';
+    html += `<div class="solar-item">
+      <div class="solar-icon" style="background:${c}"></div>
+      <div class="solar-name">${name}</div>
+      <div class="solar-alt">${alt}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function updateObjectList() {
+  const list = document.getElementById('objList');
+  const sorted = [...allObjects].sort((a, b) => b.alt - a.alt);
+  let html = '';
+  for (let i = 0; i < sorted.length; i++) {
+    const o = sorted[i];
+    const vis = o.alt > 0;
+    const sel = selectedObj && selectedObj.name === o.name;
+    const delay = i * 30;
+    html += `<div class="obj-item ${sel ? 'selected' : ''}" data-name="${o.name}" 
+      style="transition-delay:${delay}ms">
+      <div class="obj-dot" style="background:${
+        o.type === 'sun' ? '#fff8e0' : o.type === 'moon' ? '#c8d0e0' : 
+        o.type === 'iss' ? '#ffffff' : 'var(--accent)'
+      }"></div>
+      <div class="obj-info">
+        <div class="obj-name">${o.name}</div>
+        <div class="obj-meta">${o.alt.toFixed(1)}° alt</div>
+      </div>
+      <div class="obj-vis ${vis ? 'above' : 'below'}">${vis ? 'VISIBLE' : 'BELOW'}</div>
+    </div>`;
+  }
+  list.innerHTML = html;
+  // Stagger animation
+  requestAnimationFrame(() => {
+    list.querySelectorAll('.obj-item').forEach(el => el.classList.add('show'));
+  });
+}
+
+function showDetailPanel(obj) {
+  selectedObj = obj;
+  const panel = document.getElementById('rightPanel');
+  const content = document.getElementById('detailContent');
+  if (!obj) {
+    panel.classList.remove('visible');
+    return;
+  }
+
+  let html = `
+    <div class="detail-type">${obj.type.toUpperCase()}</div>
+    <div class="detail-name">${obj.name}</div>
+    <div class="detail-desc">${obj.desc || ''}</div>
+    <div class="detail-big-num">${obj.alt.toFixed(1)}°</div>
+    <div class="detail-big-label">Altitude</div>
+    <div class="detail-grid">
+      <div><div class="detail-stat-label">Azimuth</div><div class="detail-stat-value">${obj.az.toFixed(1)}°</div></div>
+      <div><div class="detail-stat-label">Distance</div><div class="detail-stat-value">${obj.distance || '—'}</div></div>
+      <div><div class="detail-stat-label">Magnitude</div><div class="detail-stat-value">${obj.mag !== undefined ? obj.mag.toFixed(2) : '—'}</div></div>
+      <div><div class="detail-stat-label">Status</div><div class="detail-stat-value">${obj.alt > 0 ? 'Visible' : 'Below'}</div></div>
+    </div>`;
+
+  // Moon phase detail
+  if (obj.type === 'moon' && obj.phaseName) {
+    html += `
+      <div class="pass-list">
+        <div class="pass-title">Lunar Phase</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+          <canvas id="moonPhaseCanvas" width="36" height="36" style="border-radius:50%;"></canvas>
+          <div>
+            <div class="detail-stat-value">${obj.phaseName}</div>
+            <div class="obj-meta" style="margin-top:2px">${obj.illum.toFixed(0)}% illuminated</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ISS extras
+  if (obj.type === 'iss') {
+    html += `
+      <div class="pass-list">
+        <div class="pass-title">Telemetry</div>
+        <div class="detail-grid" style="margin-top:6px;">
+          <div><div class="detail-stat-label">Speed</div><div class="detail-stat-value">${(obj.speed || 7.66).toFixed(2)} km/s</div></div>
+          <div><div class="detail-stat-label">Orbit Alt</div><div class="detail-stat-value">${(obj.issAlt || 420).toFixed(0)} km</div></div>
+          <div><div class="detail-stat-label">Latitude</div><div class="detail-stat-value">${(obj.lat || 0).toFixed(2)}°</div></div>
+          <div><div class="detail-stat-label">Longitude</div><div class="detail-stat-value">${(obj.lon || 0).toFixed(2)}°</div></div>
+        </div>
+      </div>`;
+
+    // ISS Ground Track mini SVG map
+    html += `
+      <div class="iss-map">
+        <div class="iss-map-label">Ground Track</div>
+        <svg viewBox="0 0 360 180" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+          <rect width="360" height="180" fill="rgba(255,255,255,0.03)" rx="4"/>
+          <line x1="0" y1="90" x2="360" y2="90" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+          <line x1="180" y1="0" x2="180" y2="180" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+          <polyline points="${issTrack.map(p => `${p.lon + 180},${90 - p.lat}`).join(' ')}" 
+            fill="none" stroke="rgba(168,196,212,0.4)" stroke-width="1"/>
+          <circle cx="${(obj.lon || 0) + 180}" cy="${90 - (obj.lat || 0)}" r="3" fill="#fff"/>
+          <circle cx="${observer.lon + 180}" cy="${90 - observer.lat}" r="2" fill="rgba(168,196,212,0.6)"/>
+        </svg>
+      </div>`;
+
+    // Pass predictions
+    const passes = predictISSPasses();
+    html += `
+      <div class="pass-list">
+        <div class="pass-title">Upcoming Passes</div>
+        ${passes.map(p => `
+          <div class="pass-item">
+            <span class="pass-time">${p.date} ${p.time}</span>
+            <span class="pass-info">${p.duration} · ${p.maxEl}</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  content.innerHTML = html;
+  panel.classList.add('visible');
+
+  // Draw moon phase canvas
+  if (obj.type === 'moon') {
+    setTimeout(() => {
+      const mc = document.getElementById('moonPhaseCanvas');
+      if (!mc) return;
+      const mctx = mc.getContext('2d');
+      const mr = 18;
+      // Full lit circle
+      mctx.fillStyle = '#e0e8f0';
+      mctx.beginPath(); mctx.arc(mr, mr, mr - 1, 0, TWO_PI); mctx.fill();
+      // Shadow
+      mctx.fillStyle = '#111';
+      mctx.beginPath();
+      const pa = obj.phaseAngle || 0;
+      if (pa < 180) {
+        mctx.arc(mr, mr, mr - 1, -Math.PI/2, Math.PI/2, false);
+        const k = Math.cos(pa * DEG);
+        mctx.ellipse(mr, mr, (mr - 1) * Math.abs(k), mr - 1, 0, Math.PI/2, -Math.PI/2, k > 0);
+      } else {
+        mctx.arc(mr, mr, mr - 1, Math.PI/2, -Math.PI/2, false);
+        const k = Math.cos(pa * DEG);
+        mctx.ellipse(mr, mr, (mr - 1) * Math.abs(k), mr - 1, 0, -Math.PI/2, Math.PI/2, k < 0);
+      }
+      mctx.fill();
+    }, 50);
+  }
+}
+
+// ─── FILTER BAR ───────────────────────────────────────────────────────
+function initFilters() {
+  const bar = document.getElementById('filterBar');
+  let html = '';
+  for (const key of Object.keys(filters)) {
+    html += `<button class="filter-tag ${filters[key] ? 'active' : ''}" data-filter="${key}">${key}</button>`;
+  }
+  bar.innerHTML = html;
+  bar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-tag');
+    if (!btn) return;
+    const key = btn.dataset.filter;
+    filters[key] = !filters[key];
+    btn.classList.toggle('active');
+    if (currentView === 'skymap') constellationDrawProgress = 0;
+  });
+}
+
+// ─── LOCATION PIPELINE ───────────────────────────────────────────────
+
+async function searchLocation(query) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+      { headers: { 'User-Agent': 'ZENITH/1.0' } }
+    );
+    const data = await res.json();
+    if (data.length > 0) {
+      observer.lat = parseFloat(data[0].lat);
+      observer.lon = parseFloat(data[0].lon);
+      observer.name = data[0].display_name.split(',')[0];
+      // Rotate globe to new location
+      globeRotY = -observer.lon;
+      globeRotX = -observer.lat * 0.3;
+      constellationDrawProgress = 0;
+      return true;
+    }
+  } catch (e) { console.warn('Location search failed:', e); }
+  return false;
+}
+
+function useGPS() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      observer.lat = pos.coords.latitude;
+      observer.lon = pos.coords.longitude;
+      observer.name = 'GPS Location';
+      globeRotY = -observer.lon;
+      globeRotX = -observer.lat * 0.3;
+      constellationDrawProgress = 0;
+      document.getElementById('locationInput').value = '';
+      document.getElementById('locationInput').placeholder = `${observer.lat.toFixed(2)}°, ${observer.lon.toFixed(2)}°`;
+    },
+    (err) => console.warn('GPS error:', err),
+    { enableHighAccuracy: true }
+  );
+}
+
+// ─── GLOBE CLICK → lat/lon ────────────────────────────────────────────
+function globeClickToLatLon(mx, my) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) * 0.32;
+  const dx = mx - cx, dy = my - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist > r) return null;
+  // Reverse projection
+  const x = dx / r, y = dy / r;
+  const z = Math.sqrt(Math.max(0, 1 - x * x - y * y));
+  // Undo rotation
+  const tilt = globeRotX * DEG;
+  const y2 = -y * Math.cos(tilt) + z * Math.sin(tilt); // swap sign
+  const z2 = y * Math.sin(tilt) + z * Math.cos(tilt); // not exactly right but close enough
+  const lat = Math.asin(-(-y * Math.cos(tilt) + z * Math.sin(tilt))) * RAD;
+  const lon = (Math.atan2(x, z2) * RAD + globeRotY + 360) % 360;
+  return { lat, lon: lon > 180 ? lon - 360 : lon };
+}
+
+// ─── CANVAS CLICK — select object or globe click ──────────────────────
+function handleCanvasClick(mx, my) {
+  // Check objects first
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = w / 2, cy = h / 2;
+
+  if (currentView === 'globe') {
+    const r = Math.min(w, h) * 0.32;
+    // Check ISS
+    if (issData && filters.ISS) {
+      const issP = latLonToGlobe(issData.latitude, issData.longitude, cx, cy, r * 1.06, globeRotX, globeRotY);
+      if (issP && Math.hypot(mx - issP.x, my - issP.y) < 15) {
+        const obj = allObjects.find(o => o.name === 'ISS');
+        if (obj) { showDetailPanel(obj); updateObjectList(); return; }
+      }
+    }
+    // Globe click for location
+    const ll = globeClickToLatLon(mx, my);
+    if (ll) {
+      observer.lat = ll.lat;
+      observer.lon = ll.lon;
+      observer.name = `${ll.lat.toFixed(2)}°, ${ll.lon.toFixed(2)}°`;
+      constellationDrawProgress = 0;
+      document.getElementById('locationInput').value = '';
+      document.getElementById('locationInput').placeholder = observer.name;
+    }
+  }
+
+  if (currentView === 'skymap' || currentView === 'radar') {
+    const r = Math.min(w, h) * 0.38;
+    // Find nearest object
+    let nearest = null, nearDist = 20;
+    for (const obj of allObjects) {
+      if (obj.alt < 0) continue;
+      const dist = r * (1 - obj.alt / 90);
+      const azRad = obj.az * DEG;
+      const px = cx + dist * Math.sin(azRad);
+      const py = cy - dist * Math.cos(azRad);
+      const d = Math.hypot(mx - px, my - py);
+      if (d < nearDist) { nearDist = d; nearest = obj; }
+    }
+    if (nearest) { showDetailPanel(nearest); updateObjectList(); }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EVENT HANDLERS
+// ═══════════════════════════════════════════════════════════════════════
+
+// View mode switching
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const newView = btn.dataset.view;
+    if (newView === currentView) return;
+    // Transition
+    canvas.style.opacity = '0';
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    setTimeout(() => {
+      currentView = newView;
+      if (newView === 'skymap') constellationDrawProgress = 0;
+      canvas.style.opacity = '1';
+    }, 200);
+  });
+});
+
+// Left panel toggle
+document.getElementById('toggleList').addEventListener('click', () => {
+  leftPanelOpen = !leftPanelOpen;
+  document.getElementById('leftPanel').classList.toggle('visible', leftPanelOpen);
+  document.getElementById('toggleList').classList.toggle('open', leftPanelOpen);
+  if (leftPanelOpen) updateObjectList();
+});
+
+document.getElementById('closeList').addEventListener('click', () => {
+  leftPanelOpen = false;
+  document.getElementById('leftPanel').classList.remove('visible');
+  document.getElementById('toggleList').classList.remove('open');
+});
+
+// Detail panel close
+document.getElementById('closeDetail').addEventListener('click', () => {
+  selectedObj = null;
+  document.getElementById('rightPanel').classList.remove('visible');
+  updateObjectList();
+});
+
+// Object list click
+document.getElementById('objList').addEventListener('click', (e) => {
+  const item = e.target.closest('.obj-item');
+  if (!item) return;
+  const name = item.dataset.name;
+  const obj = allObjects.find(o => o.name === name);
+  if (obj) showDetailPanel(obj);
+  updateObjectList();
+});
+
+// Location search
+document.getElementById('locationInput').addEventListener('keydown', async (e) => {
+  if (e.key === 'Enter') {
+    const val = e.target.value.trim();
+    if (!val) return;
+    // Check for manual lat/lon
+    const parts = val.split(',').map(s => parseFloat(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      observer.lat = parts[0];
+      observer.lon = parts[1];
+      observer.name = `${parts[0].toFixed(2)}°, ${parts[1].toFixed(2)}°`;
+      globeRotY = -observer.lon;
+      globeRotX = -observer.lat * 0.3;
+      constellationDrawProgress = 0;
+    } else {
+      await searchLocation(val);
+    }
+    e.target.value = '';
+    e.target.placeholder = observer.name;
+  }
+});
+
+// GPS button
+document.getElementById('gpsBtn').addEventListener('click', useGPS);
+
+// Canvas drag (globe rotation)
+canvas.addEventListener('mousedown', (e) => {
+  if (currentView !== 'globe') return;
+  isDragging = true;
+  dragStartX = e.clientX; dragStartY = e.clientY;
+  dragStartRotX = globeRotX; dragStartRotY = globeRotY;
+  canvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+  globeRotY = dragStartRotY - dx * 0.3;
+  globeRotX = Math.max(-60, Math.min(60, dragStartRotX + dy * 0.3));
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (isDragging) {
+    const dx = Math.abs(e.clientX - dragStartX);
+    const dy = Math.abs(e.clientY - dragStartY);
+    if (dx < 3 && dy < 3) {
+      handleCanvasClick(e.clientX, e.clientY);
+    }
+    isDragging = false;
+    canvas.style.cursor = 'default';
+  }
+});
+
+// Click for sky map / radar
+canvas.addEventListener('click', (e) => {
+  if (currentView !== 'globe') {
+    handleCanvasClick(e.clientX, e.clientY);
+  }
+});
+
+// Touch support
+let touchStartX = 0, touchStartY = 0, touchStartRotX = 0, touchStartRotY = 0;
+canvas.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  touchStartX = t.clientX; touchStartY = t.clientY;
+  touchStartRotX = globeRotX; touchStartRotY = globeRotY;
+  isDragging = true;
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  if (!isDragging || currentView !== 'globe') return;
+  const t = e.touches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  globeRotY = touchStartRotY - dx * 0.3;
+  globeRotX = Math.max(-60, Math.min(60, touchStartRotX + dy * 0.3));
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  isDragging = false;
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN RENDER LOOP
+// ═══════════════════════════════════════════════════════════════════════
+
+function render(timestamp) {
+  animFrame = requestAnimationFrame(render);
+  if (!bootDone) return;
+
+  const now = new Date();
+  const t = timestamp || 0;
+  const w = window.innerWidth, h = window.innerHeight;
+
+  // Clear
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+
+  // Star field always draws
+  drawStarField(t);
+
+  // Compute objects
+  computeObjects(now);
+
+  // Render active view
+  if (currentView === 'globe') drawGlobe(now, t);
+  else if (currentView === 'skymap') drawSkyMap(now, t);
+  else if (currentView === 'radar') drawRadar(now, t);
+
+  // Update UI elements periodically (throttled)
+  if (Math.floor(t / 1000) !== Math.floor((t - 16) / 1000)) {
+    updateClock();
+    updateObjCount();
+    updateISSTelemetry();
+    updateSolarStatus();
+    if (selectedObj) {
+      const updated = allObjects.find(o => o.name === selectedObj.name);
+      if (updated) showDetailPanel(updated);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5-SECOND LIVE REFRESH LOOP
+// ═══════════════════════════════════════════════════════════════════════
+
+setInterval(() => {
+  fetchISS();
+  if (leftPanelOpen) updateObjectList();
+}, 5000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════════════════════════════════
+
+async function boot() {
+  // Set initial globe rotation to show Chennai
+  globeRotY = -observer.lon;
+  globeRotX = -observer.lat * 0.3;
+
+  // Fetch ISS immediately
+  await fetchISS();
+
+  // Initialize filters
+  initFilters();
+
+  // Start render loop
+  bootDone = true;
+  requestAnimationFrame(render);
+
+  // Wait for visual boot animation
+  await new Promise(r => setTimeout(r, 2200));
+
+  // Fade out boot overlay
+  document.getElementById('bootOverlay').classList.add('fade-out');
+
+  // Stagger in UI elements
+  await new Promise(r => setTimeout(r, 400));
+  document.getElementById('topbar').classList.add('visible');
+
+  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('locationBar').classList.add('visible');
+
+  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('viewModes').classList.add('visible');
+  document.getElementById('toggleList').classList.add('visible');
+
+  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('solarStatus').classList.add('visible');
+  document.getElementById('issTelemetry').classList.add('visible');
+
+  // Remove boot overlay from DOM after transition
+  await new Promise(r => setTimeout(r, 800));
+  document.getElementById('bootOverlay').remove();
+
+  // Update location placeholder
+  document.getElementById('locationInput').placeholder = observer.name;
+}
+
+boot();
+</script>
+</body>
+</html>
