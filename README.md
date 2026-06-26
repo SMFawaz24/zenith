@@ -2,7 +2,7 @@
 
 A real-time cosmic radar that shows you what is in the sky above **any location on Earth** - the ISS, planets, bright stars, the Moon, and the Sun - computed with astronomical precision and rendered through three immersive visualizations.
 
-**[Live Demo](https://zenith-smfawaz24.vercel.app)** · **[GitHub](https://github.com/SMFawaz24/zenith)** · Built for the Astral Web Innovate Hackathon
+**[Live Demo](https://zenithdepl.vercel.app)** · **[GitHub](https://github.com/SMFawaz24/zenith)** · Built for the Astral Web Innovate Hackathon
 
 ---
 
